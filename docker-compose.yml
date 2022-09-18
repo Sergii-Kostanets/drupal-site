@@ -1,0 +1,62 @@
+version: "3"
+
+services:
+  php:
+    build: .
+    working_dir: '/var/www'
+    volumes:
+      - './:/var/www:cached'
+    env_file:
+      - ./.env
+    environment:
+      - PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/var/www/vendor/bin
+    hostname: ${PROJECT_BASE_URL}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.php.rule=Host(`${PROJECT_BASE_URL}`)"
+      - "traefik.http.services.php.loadbalancer.server.port=80"
+
+  database:
+    image: mariadb:10
+    volumes:
+      - site-datavolume:/var/lib/mysql
+    restart: always
+    environment:
+      - MARIADB_ROOT_PASSWORD=admin
+      - MARIADB_DATABASE=${MYSQL_DB_NAME}
+      - MARIADB_USER=${MYSQL_USER}
+      - MARIADB_PASSWORD=${MYSQL_PASS}
+
+  phpmyadmin:
+    image: phpmyadmin:5.2-apache
+    restart: always
+    environment:
+      - PMA_ARBITRARY=1
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASS}
+    labels:
+      - "traefik.http.routers.phpmyadmin.rule=Host(`phpmyadmin.${PROJECT_BASE_URL}`)"
+      - "traefik.http.services.phpmyadmin.loadbalancer.server.port=80"
+
+  traefik:
+    image: traefik:2.9
+    command: --api.insecure=true --providers.docker
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+  node:
+    image: node:slim
+    user: "node"
+    environment:
+      - NODE_ENV=development
+      - SHELL=bash
+    volumes:
+      - .:/home/node/app
+    # working_dir: /home/node/app/web/themes/custom/beetroot_example_theme
+    command: sh -c "npm ci && npm run build"
+
+volumes:
+  site-datavolume:
